@@ -1,0 +1,364 @@
+---
+title: "Set up and tidying"
+output: 
+  github_document:
+    toc: true
+date: "11/06/2022"
+author: Young Ha Suh, ys757@cornell.edu; Vanya Rohwer, vgr7@cornell.edu
+editor_options: 
+  chunk_output_type: console
+---
+
+The following analyses is conducted on spectra data for 119 specimens. Sample sizes for each specimen category compose of the following:
+
+| Bullock's oriole | |   | Baltimore oriole |   |
+|----------|----------|----------|----------|----------|
+| Historic | Modern | Reference | Historic | Modern |
+| 20 | 20 | 40 | 20 | 19 |
+
+Bullock's reference specimens come from the Museum of Vertebrate Zoology (MVZ; n = 20) and the University of Washington Burke Museum (UWBM; n = 20), all from CA, NE, WA, OR, AZ.  
+
+**Set up**: integration time, 100 ms; 10 readings averaged per recording; boxcar width 10
+
+Each specimen has 5 patches measured (2 black 3 orange) and each patch is measured 3 times; i.e. 15 measurements per specimen. 
+
+![**Fig 1**. Patches measured on specimens.](pics.png){width=30%}
+
+<br>
+
+### Load libraries
+Using `pavo` as main, rest as data manipulation & organization
+```{r Load libraries, message = FALSE, results = "hide", warning = FALSE}
+# data tidying
+library(data.table)
+library(readxl)
+library(tidyverse)
+library(stringr)
+library(knitr)
+library(car)
+# figures
+library(ggpubr)
+library(ggpmisc)
+library(cowplot)
+#analyses
+library(pavo)
+library(lme4)
+library(DHARMa)
+```
+
+Set ggplot themes for figures
+```{r ggplot theme}
+mytheme <- theme(
+  plot.title = element_text(size=20,face="bold",color="black"),      
+  axis.text=element_text(size=16, color="black"),
+  axis.title=element_text(size=18,face="bold",color="black"),
+  axis.text.x=element_text(size=16, color="black"), 
+  axis.text.y=element_text(size=16, color="black"),
+  legend.text = element_text(size=16, color="black"),
+  legend.title = element_text(size=16, color="black", face="bold"))
+
+pal1 <- c("#ffa600", "#58508d")
+pal2 <- c("#58508d", "#ffa600")
+pal3 <- c("#635e50", "#e59500")
+```
+
+# Import data
+## Attribute data
+Load `specimen_info.xls` & filter out necessary info
+
+```{r Attribute data, message = FALSE, warning=FALSE}
+attributes <- read_excel("oriole_specimen_info.xlsx")
+knitr::kable(head(attributes))
+
+attributes$date <- as.Date(attributes$CollectionDate, origin = "1899-12-30")
+
+att <- attributes[,c("ID", "sp_id", "cat", "date", "Code")]
+att$cat <- as.factor(att$cat)
+
+# Just IDs and category
+idcat <- att[,c("ID", "cat")]
+```
+
+
+<br>
+
+
+## Spectra data 
+Finds and imports spectra files from a folder `allspec` and `burke`. Contains replicated data for one missing measurement. 
+
+```{r Load specs, message = FALSE, results = "hide"}
+spec <- getspec("allspec", ext = "txt", lim = c(300, 700))  # 1485 files
+spec <- as.rspec(spec)
+
+burke_raw <- getspec("burke", ext = "txt", lim = c(300, 700)) #300 files
+```
+
+## Visually check spectra
+```{r See other spectra, message = FALSE, fig.cap = "**Fig 2a.** Spectra of specimens measured in 2019."}
+plot(spec)
+```
+
+Check spectra of Burke specimens 
+```{r See burke spectra, message = FALSE, fig.cap = "**Fig 2b.** Spectra of UWBM specimens measured in 2021."}
+plot(burke_raw)
+
+png("burke_raw_spec.png", width = 800, height = 800, pointsize = 22, res = 100, bg = "transparent")
+plot(burke_raw, col = spec2rgb(burke_raw), cex.lab = 1.5, cex.axis = 1.5)
+dev.off()
+```
+
+
+### Fix odd peaks
+Measurements for the Burke museum specimen have two peaks in the spectra that occur for unknown reasons. They were replaced by deleting reflectance at those wavelengths and interpolating the values from before/after. The areas of concern seem to be 470-500 nm and 510-560 nm. 
+
+ 1. Replace odd wavelengths with `NA`
+ 2. Use `as.rspec` to interpolate gaps
+```{r Fix weird specs, message = FALSE}
+wl <- burke_raw$wl
+
+# replace with NA
+burke_raw$wl <- as.numeric(burke_raw$wl)
+
+burke_raw[which(burke_raw$wl > 470 & burke_raw$wl < 500),] <- NA
+burke_raw[which(burke_raw$wl > 515 & burke_raw$wl < 560),] <- NA
+
+burke_raw[,1] <- wl # feed back in because it gets deleted
+
+# Interpolate
+burke <- as.rspec(burke_raw)
+```
+
+3. Check new spectra
+
+```{r See new burke spectra, message = FALSE, fig.cap = "**Fig 2c.** Spectra of UWBM specimens"}
+png("burke_corrected_spec.png", width = 800, height = 800, pointsize = 22, res = 100, bg = "transparent")
+plot(burke, col = spec2rgb(burke), cex.lab = 1.5, cex.axis = 1.5)
+dev.off()
+
+# join specs
+allspec <- merge(spec, burke)
+```
+
+<br>
+
+## Average spectra
+Modify names for future processing.
+```{r Modify names for processing, echo = FALSE, message = FALSE}
+# average spectra (3 measurements per patch) per specimen part
+m.allspec <- aggspec(allspec, by = 3, FUN = mean, trim = FALSE)
+
+# change values to color patch names
+allsp.id <- names(m.allspec)
+allsp.id <- gsub("_Reflection", "", allsp.id)
+allsp.id <- gsub("_00001", "_blk1", allsp.id)
+allsp.id <- gsub("_00004", "_blk2", allsp.id)
+allsp.id <- gsub("_00007", "_orn1", allsp.id)
+allsp.id <- gsub("_00010", "_orn2", allsp.id)
+allsp.id <- gsub("_00013", "_orn3", allsp.id) 
+
+colnames(m.allspec) <- allsp.id
+```
+
+## Smooth spectra
+Suitable soothing parameter `span = 0.14` is the minimum amount of smoothing to remove spectral noise. 
+
+```{r Smooth spectra, message = FALSE, fig.cap = "**Fig 3.** Check smoothing parameters"}
+# check which smoothing parameter to use
+plotsmooth(m.allspec, minsmooth = 0.05, maxsmooth = 0.5, curves = 6, ask = FALSE, specnum = 6)
+
+# smooth spectra based on that
+allspec.sm <- procspec(m.allspec, opt = "smooth", span = 0.14, fixneg = "zero") 
+```
+
+```{r All spectra in color, fig.cap = "**Fig 4.** Spectra based on their color"}
+# spectra in their colors
+plot(allspec.sm, col = spec2rgb(allspec.sm), cex.lab = 1.5, cex.axis = 1.5)
+```
+
+<br>
+
+# Split orange and black patches
+### Extract orange patches
+
+Subset then extract
+```{r Extract orange patches, message = FALSE}
+allspec.orn <- subset(allspec.sm, "orn") #n=343
+
+# average 3 measurements
+allspec.orn.avg <- aggspec(allspec.orn, by = 3, FUN = mean, trim = FALSE) 
+```
+
+Get spetra
+```{r Orange patches - spectra, message = FALSE, results = FALSE}
+# get names from list
+allspecimens <- names(allspec.orn.avg)
+allds <- as.data.frame(allspecimens)
+
+# change names to match
+allds$ID <- gsub("MVZ_", "MVZ", allds$allspecimens)
+idcat$ID2 <- gsub("MVZ.", "MVZ", idcat$ID)
+idcat$ID2 <- gsub("UWBM.", "UWBM", idcat$ID2)
+idcat$ID2 <- gsub("UWBMBU", "UWBM", idcat$ID2)
+
+
+allds$ID2 <- gsub("\\_.*", "", allds$ID) #extract values before _
+allds$patch <- gsub(".*_", "", allds$allspecimens) #extract values after _
+
+idcat <- rbind(idcat, data.frame(ID = "wl", cat= "wl", ID2 = "wl")) # to match
+
+# Check if specimen numbers match
+# n_distinct(allds$ID2) #n=120
+# n_distinct(ct$ID2) #n=120
+
+# Create a new column with specimen type and patch
+allds2 <- allds %>% 
+  left_join(idcat, by = "ID2", keep=FALSE) 
+
+# Create separate string for category list
+allcategory <- allds2$cat
+```
+
+Plot average spectra 
+```{r Orange patches - plot average spectra by specimen, fig.cap = "**Fig 5.** Spectra based on their specimen category"}
+# plot by specimen
+asoa <- allspec.orn.avg
+colnames(asoa) <- allcategory
+
+aggplot(asoa, by = allcategory, FUN.center = median, ylim = c(0, 65),
+        alpha = 0.3, legend = F, cex.lab = 1.5, cex.axis = 1.5, lwd=2)
+legend(290, 67, legend = c("BA historic", "BA modern", "BU historic", "BU modern", "BU reference"),
+       col = c("red", "royalblue", "green", "purple", "orange", "yellow"), lty=1, cex=1.2,
+       box.lty=0, lwd=2, bg="transparent")
+```
+
+
+Get Colorimetric variables
+```{r Orange patches - colorimetric variables, message = FALSE, results = FALSE}
+# use summary function
+allsum.orn <- summary(allspec.orn.avg)
+setDT(allsum.orn, keep.rownames = TRUE)[]
+
+# convert MVZ names to be consistent with the specimen attribute data
+allsum.orn$rn <- gsub("MVZ_", "MVZ.", allsum.orn$rn)
+allid.orn <- do.call(rbind, strsplit(allsum.orn$rn, "\\_"))[, 1]
+allsum.orn$ID <- allid.orn #specimen ID
+
+# change UWBM to be consistent with the attribute data table
+allsum.orn$ID <- gsub("UWBM", "UWBM.BU", allsum.orn$ID)
+
+# Join spectra summary data with attribute data
+alldat.orn <- allsum.orn %>%
+  left_join(att, by = "ID", keep = F)
+
+# Make just a species category
+alldat.orn$sp <- gsub("\\_.*", "", alldat.orn$cat)
+
+# Rename species category for future plotting
+alldat.orn$spc <- factor(alldat.orn$sp, 
+                         levels = c("Bull", "Balt"), 
+                         labels = c("Bullock's", "Baltimore"))
+
+
+# save as RDS file
+saveRDS(alldat.orn, "alldat.orn.rds")
+#alldat.orn <- readRDS("alldat.orn.rds")
+```
+
+#### Spectra split by species 
+
+```{r Split spectra by species}
+# split by species
+asoa.ba <- subset(asoa, "Balt")
+asoa.bu <- subset(asoa, "Bull")
+
+#remove bull-ref for now
+asoa.bu2 = select(asoa.bu, 1:41)
+
+
+allcat <- as.data.frame(allcategory)
+allcat2 <- allcat %>% 
+  filter(allcategory =="wl" | allcategory == "Balt_hist" | allcategory == "Balt_mod")
+colnames(asoa.ba) <- allcat2$allcategory
+
+allcat3 <- allcat %>% 
+  filter(allcategory =="wl" | allcategory == "Bull_hist" | allcategory == "Bull_mod")
+colnames(asoa.bu2) <- allcat3$allcategory
+```
+
+
+Add contemporary Baltimore into Bullock's plot as dash lines
+```{r}
+# filter out necessary categories
+allcat4 <- allcat %>% 
+  filter(allcategory =="wl" | allcategory == "Bull_mod" | allcategory == "Balt_mod")
+
+
+a1 <- subset(asoa, "Bull_mod")
+
+a2 <- subset(asoa, "Balt_mod")
+a2$wl <- NULL
+
+aa <- cbind(a1, a2)
+colnames(aa) <- allcat4$allcategory
+
+
+# create Bullock's spectra and save as image
+png("all_spectra_bullocks.png", width = 1400, height = 800, pointsize = 20, res = 100, bg = "transparent")
+aggplot(asoa.bu2, by = allcat3$allcategory, FUN.center = median, ylim = c(0, 65),
+        lty=c(1, 1), alpha = 0.3, lcol=c("red", "royalblue"), 
+        shadecol=c("red", "royalblue"),  legend = F, 
+        cex.lab = 1.5, cex.axis = 1.5, lwd=c(2,2))
+legend(290, 67, col = c("red", "royalblue", reverse=T), legend = c("Historic", "Contemporary"), lty=c(1, 1), cex=1.2, box.lty=0, lwd=2, bg="transparent", title = "Bullock's oriole")
+dev.off()
+
+# create Baltimore spectra 
+png("all_spectra_baltimore.png",  width = 1400, height = 800, pointsize = 20, res = 100, bg = "transparent")
+aggplot(asoa.ba, by = allcat2$allcategory, FUN.center = median, ylim = c(0, 65),
+        alpha = 0.3, legend = F, cex.lab = 1.5, cex.axis = 1.5, lwd=2, lcol=c("red", "royalblue"))
+legend(290, 67, legend = c("Historic", "Contemporary"), col = c("red", "royalblue"), 
+       lty=1, cex=1.2, box.lty=0, lwd=2, bg="transparent", title = "Baltimore oriole")
+dev.off()
+
+# create spectra for modern
+png("all_spectra_modern.png",  width = 1400, height = 800, pointsize = 20, res = 100, bg = "transparent")
+aggplot(aa, by = allcat4$allcategory, FUN.center = median, ylim = c(0, 65),
+        alpha = 0.3, legend = F, cex.lab = 1.5, cex.axis = 1.5, lwd=2, lcol=c("red", "royalblue"))
+legend(290, 67, legend = c("Baltimore", "Bullock's"), col = c("red", "royalblue"), 
+       lty=1, cex=1.2, box.lty=0, lwd=2, bg="transparent", title = "Modern orioles")
+dev.off()
+```
+
+
+### Extract black patches
+Repeat steps above 
+```{r Extract black patches, message = FALSE, results = FALSE}
+allspec.blk <- subset(allspec.sm, "blk")
+
+# average 3 measurements
+allspec.blk.avg <- aggspec(allspec.blk, by = 2, FUN = mean, trim = FALSE) 
+
+# Get colorimetric values
+allsum.blk <- summary(allspec.blk.avg)
+setDT(allsum.blk, keep.rownames = TRUE)[]
+
+# convert MVZ and UWBM names to be consistent with the specimen attribute data
+allsum.blk$rn <- gsub("MVZ_", "MVZ.", allsum.blk$rn)
+allid.blk <- do.call(rbind, strsplit(allsum.blk$rn, "\\_"))[, 1]
+allsum.blk$ID <- allid.blk #specimen ID
+allsum.blk$ID <- gsub("UWBM", "UWBM.BU", allsum.blk$ID)
+
+
+# Join spectra summary data with attribute data
+alldat.blk <- allsum.blk %>%
+  left_join(att, by = "ID", keep = F)
+
+# Make just a species category
+alldat.blk$sp <- gsub("\\_.*", "", alldat.blk$cat)
+
+# Rename species category for future plotting
+alldat.blk$spc <- factor(alldat.blk$sp, levels = c("Bull", "Balt"), labels = c("Bullock's", "Baltimore"))
+
+# save as RDS file - load data here if needed 
+saveRDS(alldat.blk, "alldat.blk.rds")
+#alldat.blk <- readRDS("alldat.blk.rds")
+```
