@@ -340,8 +340,8 @@ b1blk <- ggplot(compare1, aes(x = cat, y = B1, fill = sp)) +
   labs(y = "Black plumage brightness (B1)") +
   scale_fill_manual(values = pal1, name = "Species", 
                     limits = c("Bull", "Balt"), 
-                    labels = c(expression(italic("Bullock's Oriole")), 
-                               expression(italic("Baltimore Oriole")))) +
+                    labels = c("Bullock's Oriole", 
+                               "Baltimore Oriole")) +
   scale_x_discrete(name = "Specimen type", 
                    limits = c("Bull_hist", "Bull_mod", "Balt_hist", "Balt_mod"), 
                    labels = c("Historic", "Contemporary","Historic", "Contemporary")) +
@@ -349,7 +349,7 @@ b1blk <- ggplot(compare1, aes(x = cat, y = B1, fill = sp)) +
   ylim(900,4000)
 b1blk
 
-ggsave("Figure4_v2.png", plot=b1blk, width=220, height=125, units="mm", dpi=600, scale=T)
+ggsave("Figure4.png", plot=b1blk, width=220, height=125, units="mm", dpi=600, scale=T)
 ```
 
 2. Chroma
@@ -414,7 +414,7 @@ pg <- plot_grid(
 
 plot_grid(pg)
 
-ggsave("Figure3_v2.png", plot=last_plot(), width=400, height=150, units="mm", dpi=600, scale=T)
+ggsave("Figure3.png", plot=last_plot(), width=400, height=150, units="mm", dpi=600, scale=T)
 ```
 
 
@@ -581,7 +581,7 @@ vismod.orn.dist <- coldist(vismod.orn,
 cate <- allcategory[-1] # get list made from above but remove wl from vector
 
 vm.orn.dist <- bootcoldist(vismod.orn, by = cate, n = c(1,2,2,4), weber=0.1, achromatic = FALSE)
-#vm.orn.dist
+vm.orn.dist
 ```
 
 
@@ -651,6 +651,6 @@ ggplot(vod3, aes(x=Var1, y=dS.mean)) +
   geom_text(x=4.5, y=0.2, inherit.aes = F, label = "Centroid comparison", 
             check_overlap = T, hjust =1, fontface="bold", size=7)
 
-ggsave("chromatic_contrast_v2.png", plot = last_plot(), width = 200, height = 80, 
+ggsave("chromatic_contrast.png", plot = last_plot(), width = 200, height = 80, 
        units = "mm", dpi = 300,  bg = "transparent")
 ```
