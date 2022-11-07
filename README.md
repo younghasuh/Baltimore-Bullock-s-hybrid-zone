@@ -8,7 +8,7 @@ This repository contains statistical code and data related to the manuscript tit
 Data files:
 - `tidying.Rmd` contains script for loading and tidying data
 - `analyses.Rmd` contains script for statistical analyses and figures. Download `alldat.orn.rds` and `alldat.blk.rds` to start from here
-- `allspec` contains spectra data for all n specimens
+- Folders `allspec` and `burke` contain spectra data for all specimens. Burke museum specimens are separate due to the transformation. 
 - `specimen_info.xlsx` contains information on specimens (ID, category, collection date, locality). 
 
 <img src="https://user-images.githubusercontent.com/22403928/159709816-4480dde4-14b5-4b13-867e-6c2ef3b143ce.png" width="800">
