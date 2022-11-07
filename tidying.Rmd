@@ -186,6 +186,8 @@ allspec.orn <- subset(allspec.sm, "orn") #n=343
 
 # average 3 measurements
 allspec.orn.avg <- aggspec(allspec.orn, by = 3, FUN = mean, trim = FALSE) 
+
+saveRDS(allspec.orn.avg, "allspec.orn.avg.rds")
 ```
 
 Get spetra
@@ -216,6 +218,8 @@ allds2 <- allds %>%
 
 # Create separate string for category list
 allcategory <- allds2$cat
+
+saveRDS(allcategory, "allcategory.rds")
 ```
 
 Plot average spectra 

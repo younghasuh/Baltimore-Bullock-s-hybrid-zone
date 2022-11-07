@@ -3,6 +3,7 @@ title: "Analyses"
 output: 
   github_document:
   toc: true
+  toc_depth: 3
 date: "11/06/2022"
 author: Young Ha Suh, ys757@cornell.edu; Vanya Rohwer, vgr7@cornell.edu
 editor_options: 
@@ -10,8 +11,9 @@ editor_options:
 ---
 
 Libraries
-```{r}
+```{r warning=F, message=F}
 # figures
+library(car)
 library(ggpubr)
 library(ggpmisc)
 library(cowplot)
@@ -20,11 +22,29 @@ library(pavo)
 library(lme4)
 library(DHARMa)
 ```
-  
+
+Set ggplot themes for figures
+```{r ggplot theme}
+mytheme <- theme(
+  plot.title = element_text(size=20,face="bold",color="black"),      
+  axis.text=element_text(size=16, color="black"),
+  axis.title=element_text(size=18,face="bold",color="black"),
+  axis.text.x=element_text(size=16, color="black"), 
+  axis.text.y=element_text(size=16, color="black"),
+  legend.text = element_text(size=16, color="black"),
+  legend.title = element_text(size=16, color="black", face="bold"))
+
+pal1 <- c("#ffa600", "#58508d")
+pal2 <- c("#58508d", "#ffa600")
+pal3 <- c("#635e50", "#e59500")
+```
+
 Load data
 ```{r}
 alldat.orn <- readRDS("alldat.orn.rds")
 alldat.blk <- readRDS("alldat.blk.rds")
+allspec.orn.avg <- readRDS("allspec.orn.avg.rds")
+allcategory <- readRDS("allcategory.rds")
 ```
 
 # Colorimetric variables
@@ -159,20 +179,14 @@ Check brightness, carotenoid chroma, hue
 # Both species
 lm_orn_both_b1 <- lm(B1 ~ date, data = alldat.orn)
 summary(lm_orn_both_b1)
-simulationOutput <- simulateResiduals(fittedModel = lm_orn_both_b1, plot = F)
-plot(simulationOutput)
 
 # Bullock's
 lm_orn_BU_b1 <- lm(B1 ~ date, data = alldat.orn[which(alldat.orn$sp == "Bull"),])
 summary(lm_orn_BU_b1)
-simulationOutput <- simulateResiduals(fittedModel = lm_orn_BU_b1, plot = F)
-plot(simulationOutput)
 
 # Baltimore
 lm_orn_BA_b1 <- lm(B1 ~ date, data = alldat.orn[which(alldat.orn$sp == "Balt"),])
 summary(lm_orn_BA_b1)
-simulationOutput <- simulateResiduals(fittedModel = lm_orn_BA_b1, plot = F)
-plot(simulationOutput)
 
 # Plot both
 ggplot(alldat.orn, aes(x = date, y = B1, shape = spc, color = spc)) +
@@ -196,8 +210,6 @@ ggplot(alldat.orn, aes(x = date, y = B1, shape = spc, color = spc)) +
 # Both species
 lm_orn_both_s9 <- lm(S9 ~ date, data = alldat.orn)
 summary(lm_orn_both_s9)
-simulationOutput <- simulateResiduals(fittedModel = lm_orn_both_s9, plot = F)
-plot(simulationOutput)
 
 # Bullock's
 lm_orn_BU_s9 <- lm(S9 ~ date, data = alldat.orn[which(alldat.orn$sp == "Bull"),])
@@ -428,32 +440,63 @@ alldat.orn$loc <- ifelse(alldat.orn$cat == "Bull_ref", "Outside", "Hybrid zone")
 
 # Separate Bullock's
 bullocks <- alldat.orn[which(alldat.orn$sp == "Bull"),]
+
+bullocks$daten <- julian(bullocks$date, origin=as.Date("1900-01-01"))
 ```
 
 
 Linear models
 ```{r H3 models, message = FALSE, warning = FALSE}
-lm1 <- lm(B1 ~ date*loc, data=bullocks)
+lm1 <- lm(B1 ~ daten*loc, data=bullocks)
 summary(lm1)
-plot(lm1) 
 vif(lm1) 
-simulationOutput <- simulateResiduals(fittedModel = lm1, plot = F)
-plot(simulationOutput)
 
-lm2 <- lm(S9 ~ date*loc, data=bullocks)
+lm2 <- lm(S9 ~ daten*loc, data=bullocks)
 summary(lm2)
-plot(lm2) 
 vif(lm2)
-simulationOutput <- simulateResiduals(fittedModel = lm2, plot = F)
-plot(simulationOutput)
 
-lm3 <- lm(H3 ~ date*loc, data=bullocks)
+lm3 <- lm(H3 ~ daten*loc, data=bullocks)
 summary(lm3)
-plot(lm3) 
 vif(lm3)
-simulationOutput <- simulateResiduals(fittedModel = lm3, plot = F)
-plot(simulationOutput)
+
+# standardize dates
+bullocks$datest <- scale(bullocks$daten)
+
+lm1st <- lm(B1 ~ datest*loc, data=bullocks)
+summary(lm1st)
+vif(lm1st) 
+par(mfrow = c(2, 2))
+plot(lm1st)
+
+lm2st <- lm(S9 ~ datest*loc, data=bullocks)
+summary(lm2st)
+vif(lm2st) 
+plot(lm2st)
+
+lm3st <- lm(H3 ~ datest*loc, data=bullocks)
+summary(lm3st)
+vif(lm3st)
+plot(lm3st)
+
+dev.off()
 ```
+
+
+### Supplementary material - Table S1 
+-> Restrict to Bullock's oriole specimens sampled post 1950
+julian(as.Date("1950-01-01"), origin=as.Date("1900-01-01")) #18262
+
+bullocks2 <- bullocks[which(bullocks$daten > 18262, )]
+
+
+lm1_mod <- lm(B1 ~ datest*loc, data=bullocks2)
+summary(lm1_mod)
+
+lm2_mod <- lm(S9 ~ datest*loc, data=bullocks2)
+summary(lm2_mod)
+
+lm3_mod <- lm(H3 ~ datest*loc, data=bullocks2)
+summary(lm3_mod)
 
 #### Plots
 
@@ -589,11 +632,11 @@ vm.orn.dist
 # ggplot
 # need to convert matrix into a usable data frame
 vod <- as.data.frame(as.table(vm.orn.dist))
-vod2 <- pivot_wider(vod, names_from = Var2, values_from = Freq)
+vod2 <- tidyr::pivot_wider(vod, names_from = Var2, values_from = Freq)
 
 # select comparisons
 vod3 <- vod2 %>% 
-  filter(Var1 == "Bull_hist-Bull_mod" | Var1 == "Balt_hist-Balt_mod" | 
+  dplyr::filter(Var1 == "Bull_hist-Bull_mod" | Var1 == "Balt_hist-Balt_mod" | 
          Var1 == "Balt_hist-Bull_hist" | Var1 == "Balt_mod-Bull_mod")
 
 ggplot(vod3, aes(x=Var1, y=dS.mean)) +
