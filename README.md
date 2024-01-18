@@ -1,5 +1,5 @@
 # Baltimore-Bullock-s-hybrid-zone
-Repo for the manuscript titled Revisiting the Baltimore-Bullock’s hybrid zone reveals changing plumage color in Bullock’s orioles submitted to The Royal Society Open Science.
+Repo for the manuscript titled Revisiting the Baltimore-Bullock’s hybrid zone reveals changing plumage color in Bullock’s orioles submitted to [The Royal Society Open Science](https://royalsocietypublishing.org/doi/10.1098/rsos.221211).
 
 **Authors**: Young Ha Suh, Russell A. Ligon, & Vanya Rohwer 
 
